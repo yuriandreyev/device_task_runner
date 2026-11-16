@@ -20,3 +20,11 @@ class ClaimedTask:
     attempt: int
     claim_token: str
     lease_until: datetime
+
+
+@dataclass(frozen=True)
+class TaskResult:
+    claim_token: str
+    status: str
+    result: object = None
+    error: str = ""

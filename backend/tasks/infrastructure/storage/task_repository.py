@@ -1,3 +1,5 @@
+import hmac
+import json
 import secrets
 from datetime import timedelta
 
@@ -5,8 +7,13 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from backend.tasks.domain.entities import ClaimedTask, Task
-from backend.tasks.domain.exceptions import DeviceNotFound, TaskNotFound
+from backend.tasks.domain.entities import ClaimedTask, Task, TaskResult
+from backend.tasks.domain.exceptions import (
+    DeviceMismatch,
+    DeviceNotFound,
+    ResultConflict,
+    TaskNotFound,
+)
 from backend.tasks.infrastructure.models import Device
 from backend.tasks.infrastructure.models import Task as TaskModel
 
@@ -53,6 +60,39 @@ class DjangoTaskRepository:
                 lease_until=task.lease_until,
             )
         return claimed
+
+    def complete(self, task_id: int, device_id: str, submission: TaskResult) -> Task:
+        with transaction.atomic(durable=True):
+            try:
+                task = TaskModel.objects.select_for_update().get(pk=task_id)
+            except TaskModel.DoesNotExist as exc:
+                raise TaskNotFound from exc
+            if task.device_id != device_id:
+                raise DeviceMismatch
+            if not task.claim_token or not hmac.compare_digest(
+                task.claim_token.encode(), submission.claim_token.encode()
+            ):
+                raise ResultConflict
+            if task.status in {"completed", "failed"}:
+                # Ignore object key order without equating JSON true and 1.
+                if (
+                    task.status != submission.status
+                    or json.dumps(task.result, sort_keys=True)
+                    != json.dumps(submission.result, sort_keys=True)
+                    or task.error != submission.error
+                ):
+                    raise ResultConflict
+            elif task.status == "running":
+                # Lease expiry alone does not invalidate the current attempt.
+                task.status = submission.status
+                task.result = submission.result
+                task.error = submission.error
+                task.completed_at = timezone.now()
+                task.save(update_fields=["status", "result", "error", "completed_at"])
+            else:
+                raise ResultConflict
+            result = to_entity(task)
+        return result
 
     def create(self, device_id: str, action: str) -> Task:
         with transaction.atomic():

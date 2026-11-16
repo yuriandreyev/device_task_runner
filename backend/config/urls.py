@@ -1,7 +1,12 @@
 from django.urls import path
 
 from backend.tasks.infrastructure.storage.task_repository import DjangoTaskRepository
-from backend.tasks.presentation.views import ClaimTaskView, TaskDetailView, TaskListView
+from backend.tasks.presentation.views import (
+    ClaimTaskView,
+    TaskDetailView,
+    TaskListView,
+    TaskResultView,
+)
 from backend.tasks.views import health
 
 urlpatterns = [
@@ -10,6 +15,11 @@ urlpatterns = [
         "api/agents/<slug:device_id>/claim/",
         ClaimTaskView.as_view(repository=DjangoTaskRepository()),
         name="task-claim",
+    ),
+    path(
+        "api/tasks/<int:task_id>/result/",
+        TaskResultView.as_view(repository=DjangoTaskRepository()),
+        name="task-result",
     ),
     path("api/tasks/", TaskListView.as_view(repository=DjangoTaskRepository()), name="task-create"),
     path(

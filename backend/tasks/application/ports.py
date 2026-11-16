@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from backend.tasks.domain.entities import ClaimedTask, Task
+from backend.tasks.domain.entities import ClaimedTask, Task, TaskResult
 
 
 class TaskRepository(Protocol):
@@ -9,3 +9,5 @@ class TaskRepository(Protocol):
     def get(self, task_id: int) -> Task: ...
 
     def claim(self, device_id: str) -> ClaimedTask | None: ...
+
+    def complete(self, task_id: int, device_id: str, submission: TaskResult) -> Task: ...

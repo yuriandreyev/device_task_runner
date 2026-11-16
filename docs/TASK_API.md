@@ -59,4 +59,24 @@ execution is not guaranteed. Completed/failed tasks are never claimed again.
 
 Device authentication verifies a SHA-256 digest and device ownership. Invalid or
 missing credentials return `401`; requesting another device's queue returns `403`.
-The result endpoint is a later implementation step and is not available yet.
+
+## Submit a result
+
+```sh
+curl -X POST http://127.0.0.1:8000/api/tasks/1/result/ \
+  -H "Authorization: Bearer <device-token>" \
+  -H 'Content-Type: application/json' \
+  -d '{"claim_token":"<claim-token>","status":"completed","result":{"os":"Linux"}}'
+```
+
+For a failure, send `status: "failed"` and a nonempty `error` string instead of
+`result`. Successful results require a JSON object; mixed result/error payloads
+and unknown fields return `400`. The response is `200` with the same task fields
+as the administrative read, without claim credentials.
+
+The transaction locks the task and verifies device ownership and the current
+claim token. Identical retries return `200` without changing any stored fields,
+including `completed_at`; conflicting retries and stale tokens return `409`.
+An expired lease still permits completion until another claim replaces the token.
+Pending tasks return `409`, missing tasks `404`, another device's task `403`, and
+missing/invalid device credentials `401`. Both completed and failed are terminal.

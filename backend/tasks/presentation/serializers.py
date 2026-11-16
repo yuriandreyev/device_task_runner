@@ -24,3 +24,20 @@ class ClaimedTaskSerializer(serializers.Serializer[ClaimedTask]):
     attempt = serializers.IntegerField(read_only=True)
     claim_token = serializers.CharField(read_only=True)
     lease_until = serializers.DateTimeField(read_only=True)
+
+
+class TaskResultSerializer(serializers.Serializer[dict[str, object]]):
+    claim_token = serializers.CharField(max_length=64, trim_whitespace=False)
+    status = serializers.ChoiceField(choices=["completed", "failed"])
+    result = serializers.JSONField(required=False)
+    error = serializers.CharField(required=False, trim_whitespace=False)
+
+    def validate(self, attrs: dict[str, object]) -> dict[str, object]:
+        if set(self.initial_data) - {"claim_token", "status", "result", "error"}:
+            raise serializers.ValidationError("Unknown fields")
+        if attrs["status"] == "completed":
+            if not isinstance(attrs.get("result"), dict) or "error" in attrs:
+                raise serializers.ValidationError("Provide a result object and no error")
+        elif "result" in attrs or not attrs.get("error"):
+            raise serializers.ValidationError("Provide an error and no result")
+        return attrs
