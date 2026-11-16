@@ -1,5 +1,7 @@
 from django.db import models
 
+from backend.tasks.domain.enums import TaskStatus
+
 
 class Device(models.Model):
     id = models.SlugField(primary_key=True, max_length=64)
@@ -12,15 +14,13 @@ class Task(models.Model):
     class Action(models.TextChoices):
         COLLECT_SYSTEM_INFO = "collect_system_info", "Collect system information"
 
-    class Status(models.TextChoices):
-        PENDING = "pending", "Pending"
-        RUNNING = "running", "Running"
-        COMPLETED = "completed", "Completed"
-        FAILED = "failed", "Failed"
-
     device = models.ForeignKey(Device, on_delete=models.PROTECT, related_name="tasks")
     action = models.CharField(max_length=32, choices=Action.choices)
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    status = models.CharField(
+        max_length=16,
+        choices=[(status.value, status.value.title()) for status in TaskStatus],
+        default=TaskStatus.PENDING.value,
+    )
     attempt = models.PositiveIntegerField(default=0)
     claim_token = models.CharField(max_length=64, null=True, blank=True, editable=False)
     lease_until = models.DateTimeField(null=True, blank=True)
@@ -40,7 +40,7 @@ class Task(models.Model):
                 condition=models.Q(action="collect_system_info"), name="task_valid_action"
             ),
             models.CheckConstraint(
-                condition=models.Q(status__in=["pending", "running", "completed", "failed"]),
+                condition=models.Q(status__in=[status.value for status in TaskStatus]),
                 name="task_valid_status",
             ),
         ]

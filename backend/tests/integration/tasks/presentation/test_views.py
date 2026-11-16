@@ -5,6 +5,7 @@ from django.contrib.auth.models import User
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
+from backend.tasks.domain.enums import TaskStatus
 from backend.tasks.infrastructure.models import Device, Task
 
 pytestmark = pytest.mark.django_db
@@ -21,13 +22,13 @@ def test_create_and_read_task(admin_client: APIClient) -> None:
     assert (task.device_id, task.action, task.status, task.attempt) == (
         "pc-42",
         "collect_system_info",
-        "pending",
+        TaskStatus.PENDING,
         0,
     )
     task.claim_token = "secret-attempt"
     task.result = {"os": "Linux"}
     task.error = ""
-    task.status = "completed"
+    task.status = TaskStatus.COMPLETED
     task.attempt = 1
     task.save()
     response = admin_client.get(f"/api/tasks/{task.pk}/")
@@ -36,7 +37,7 @@ def test_create_and_read_task(admin_client: APIClient) -> None:
         "id": task.pk,
         "device_id": "pc-42",
         "action": "collect_system_info",
-        "status": "completed",
+        "status": TaskStatus.COMPLETED,
         "attempt": 1,
         "result": {"os": "Linux"},
         "error": "",

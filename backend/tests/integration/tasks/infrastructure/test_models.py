@@ -2,6 +2,7 @@ import pytest
 from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 
+from backend.tasks.domain.enums import TaskStatus
 from backend.tasks.infrastructure.models import Device, Task
 
 pytestmark = pytest.mark.django_db
@@ -11,7 +12,7 @@ def test_task_defaults_and_persisted_result() -> None:
     device = Device.objects.create(id="pc-42", name="Demo", token_digest="a" * 64)
     task = Task.objects.create(device=device, action=Task.Action.COLLECT_SYSTEM_INFO)
     task.refresh_from_db()
-    assert task.status == Task.Status.PENDING
+    assert task.status == TaskStatus.PENDING
     assert task.attempt == 0
     assert task.claim_token is None
     assert task.lease_until is None
@@ -37,5 +38,5 @@ def test_database_rejects_invalid_task_fields(changes: dict[str, object]) -> Non
         Task.objects.filter(pk=task.pk).update(**changes)
     task.refresh_from_db()
     assert task.action == Task.Action.COLLECT_SYSTEM_INFO
-    assert task.status == Task.Status.PENDING
+    assert task.status == TaskStatus.PENDING
     assert task.attempt == 0

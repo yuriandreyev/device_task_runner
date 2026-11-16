@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from backend.tasks.domain.entities import ClaimedTask, Task
+from backend.tasks.domain.enums import TaskStatus
 
 
 class CreateTaskSerializer(serializers.Serializer[dict[str, str]]):
@@ -28,16 +29,17 @@ class ClaimedTaskSerializer(serializers.Serializer[ClaimedTask]):
 
 class TaskResultSerializer(serializers.Serializer[dict[str, object]]):
     claim_token = serializers.CharField(max_length=64, trim_whitespace=False)
-    status = serializers.ChoiceField(choices=["completed", "failed"])
+    status = serializers.ChoiceField(choices=[TaskStatus.COMPLETED, TaskStatus.FAILED])
     result = serializers.JSONField(required=False)
     error = serializers.CharField(required=False, trim_whitespace=False)
 
     def validate(self, attrs: dict[str, object]) -> dict[str, object]:
         if set(self.initial_data) - {"claim_token", "status", "result", "error"}:
             raise serializers.ValidationError("Unknown fields")
-        if attrs["status"] == "completed":
+        if attrs["status"] == TaskStatus.COMPLETED:
             if not isinstance(attrs.get("result"), dict) or "error" in attrs:
                 raise serializers.ValidationError("Provide a result object and no error")
         elif "result" in attrs or not attrs.get("error"):
             raise serializers.ValidationError("Provide an error and no result")
+        attrs["status"] = TaskStatus(str(attrs["status"]))
         return attrs

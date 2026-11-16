@@ -9,6 +9,7 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
+from backend.tasks.domain.enums import TaskStatus
 from backend.tasks.infrastructure.models import Device, Task
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -35,7 +36,7 @@ def submit(client: APIClient, task: Task, **payload: object) -> Response:
         f"/api/tasks/{task.pk}/result/",
         {
             "claim_token": task.claim_token,
-            "status": "completed",
+            "status": TaskStatus.COMPLETED,
             "result": {"os": "Linux"},
             **payload,
         },
@@ -43,12 +44,12 @@ def submit(client: APIClient, task: Task, **payload: object) -> Response:
     )
 
 
-@pytest.mark.parametrize("terminal", ["completed", "failed"])
+@pytest.mark.parametrize("terminal", [TaskStatus.COMPLETED, TaskStatus.FAILED])
 def test_result_is_terminal_and_retry_does_not_change_any_fields(
-    client: APIClient, task: Task, terminal: str
+    client: APIClient, task: Task, terminal: TaskStatus
 ) -> None:
     payload: dict[str, object] = {"claim_token": task.claim_token, "status": terminal}
-    if terminal == "completed":
+    if terminal == TaskStatus.COMPLETED:
         payload["result"] = {"os": "Linux"}
     else:
         payload["error"] = "failure"
@@ -57,8 +58,8 @@ def test_result_is_terminal_and_retry_does_not_change_any_fields(
     task.refresh_from_db()
     assert task.status == terminal
     assert task.completed_at is not None
-    assert task.result == ({"os": "Linux"} if terminal == "completed" else None)
-    assert task.error == ("failure" if terminal == "failed" else "")
+    assert task.result == ({"os": "Linux"} if terminal == TaskStatus.COMPLETED else None)
+    assert task.error == ("failure" if terminal == TaskStatus.FAILED else "")
     snapshot = Task.objects.values().get(pk=task.pk)
     assert client.post(url, payload, format="json").status_code == 200
     assert Task.objects.values().get(pk=task.pk) == snapshot
@@ -86,7 +87,7 @@ def test_reclaim_rejects_old_token(client: APIClient, task: Task) -> None:
     assert client.post("/api/agents/pc-42/claim/").status_code == 200
     assert submit(client, task).status_code == 409
     task.refresh_from_db()
-    assert task.status == "running"
+    assert task.status == TaskStatus.RUNNING
     assert task.attempt == 2
     assert submit(client, task).status_code == 200
 
@@ -96,13 +97,13 @@ def test_other_device_pending_and_missing_task(client: APIClient, task: Task) ->
     Task.objects.filter(pk=task.pk).update(device_id="other")
     assert submit(client, task).status_code == 403
     task.refresh_from_db()
-    assert task.status == "running"
+    assert task.status == TaskStatus.RUNNING
     pending = Task.objects.create(device_id="pc-42", action="collect_system_info")
     assert submit(client, pending, claim_token="token").status_code == 409
     assert (
         client.post(
             "/api/tasks/999999/result/",
-            {"claim_token": "token", "status": "completed", "result": {}},
+            {"claim_token": "token", "status": TaskStatus.COMPLETED, "result": {}},
             format="json",
         ).status_code
         == 404
@@ -123,16 +124,16 @@ def test_administrator_cannot_submit(admin_client: APIClient, task: Task) -> Non
     "payload",
     [
         {},
-        {"claim_token": "x", "status": "running"},
-        {"claim_token": "x", "status": "completed"},
-        {"claim_token": "x", "status": "completed", "result": []},
-        {"claim_token": "x", "status": "completed", "result": None},
-        {"claim_token": "x", "status": "completed", "result": {}, "error": "oops"},
-        {"claim_token": "x", "status": "failed"},
-        {"claim_token": "x", "status": "failed", "error": ""},
-        {"claim_token": "x", "status": "failed", "error": "oops", "result": {}},
-        {"claim_token": "", "status": "completed", "result": {}},
-        {"claim_token": "x", "status": "completed", "result": {}, "extra": 1},
+        {"claim_token": "x", "status": TaskStatus.RUNNING},
+        {"claim_token": "x", "status": TaskStatus.COMPLETED},
+        {"claim_token": "x", "status": TaskStatus.COMPLETED, "result": []},
+        {"claim_token": "x", "status": TaskStatus.COMPLETED, "result": None},
+        {"claim_token": "x", "status": TaskStatus.COMPLETED, "result": {}, "error": "oops"},
+        {"claim_token": "x", "status": TaskStatus.FAILED},
+        {"claim_token": "x", "status": TaskStatus.FAILED, "error": ""},
+        {"claim_token": "x", "status": TaskStatus.FAILED, "error": "oops", "result": {}},
+        {"claim_token": "", "status": TaskStatus.COMPLETED, "result": {}},
+        {"claim_token": "x", "status": TaskStatus.COMPLETED, "result": {}, "extra": 1},
     ],
 )
 def test_invalid_payload_does_not_mutate_task(
@@ -168,5 +169,5 @@ def test_simultaneous_results_are_serialized(
         statuses = sorted(f.result(timeout=10) for f in futures)
     assert statuses == ([200, 200] if identical else [200, 409])
     task.refresh_from_db()
-    assert task.status == "completed"
+    assert task.status == TaskStatus.COMPLETED
     assert task.result in [{"os": "Linux"}, {"os": "Other"}]

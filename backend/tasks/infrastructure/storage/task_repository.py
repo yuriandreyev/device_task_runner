@@ -8,6 +8,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from backend.tasks.domain.entities import ClaimedTask, Task, TaskResult
+from backend.tasks.domain.enums import TaskStatus
 from backend.tasks.domain.exceptions import (
     DeviceMismatch,
     DeviceNotFound,
@@ -23,7 +24,7 @@ def to_entity(task: TaskModel) -> Task:
         id=task.pk,
         device_id=task.device_id,
         action=task.action,
-        status=task.status,
+        status=TaskStatus(task.status),
         attempt=task.attempt,
         result=task.result,
         error=task.error,
@@ -39,15 +40,15 @@ class DjangoTaskRepository:
                 TaskModel.objects.select_for_update(skip_locked=True)
                 .filter(device_id=device_id)
                 .filter(
-                    Q(status=TaskModel.Status.PENDING)
-                    | Q(status=TaskModel.Status.RUNNING, lease_until__lte=now)
+                    Q(status=TaskStatus.PENDING)
+                    | Q(status=TaskStatus.RUNNING, lease_until__lte=now)
                 )
                 .order_by("created_at", "id")
                 .first()
             )
             if task is None:
                 return None
-            task.status = TaskModel.Status.RUNNING
+            task.status = TaskStatus.RUNNING
             task.attempt += 1
             task.claim_token = secrets.token_urlsafe(32)
             task.lease_until = timezone.now() + timedelta(seconds=60)
@@ -73,7 +74,7 @@ class DjangoTaskRepository:
                 task.claim_token.encode(), submission.claim_token.encode()
             ):
                 raise ResultConflict
-            if task.status in {"completed", "failed"}:
+            if task.status in {TaskStatus.COMPLETED, TaskStatus.FAILED}:
                 # Ignore object key order without equating JSON true and 1.
                 if (
                     task.status != submission.status
@@ -82,7 +83,7 @@ class DjangoTaskRepository:
                     or task.error != submission.error
                 ):
                     raise ResultConflict
-            elif task.status == "running":
+            elif task.status == TaskStatus.RUNNING:
                 # Lease expiry alone does not invalidate the current attempt.
                 task.status = submission.status
                 task.result = submission.result

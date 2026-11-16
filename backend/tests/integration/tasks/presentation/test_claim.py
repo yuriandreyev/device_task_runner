@@ -9,6 +9,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework.test import APIClient
 
+from backend.tasks.domain.enums import TaskStatus
 from backend.tasks.infrastructure.models import Device, Task
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -32,7 +33,7 @@ def test_claim_commits_attempt_and_blocks_second_claim(device_client: APIClient)
     assert response.status_code == 200
     data = response.json()
     task.refresh_from_db()
-    assert task.status == "running"
+    assert task.status == TaskStatus.RUNNING
     assert task.attempt == 1
     assert task.claim_token and len(task.claim_token) >= 43
     assert task.lease_until is not None
@@ -54,7 +55,7 @@ def test_expired_attempt_is_reissued_with_new_credentials(device_client: APIClie
     task = Task.objects.create(
         device_id="pc-42",
         action="collect_system_info",
-        status="running",
+        status=TaskStatus.RUNNING,
         attempt=1,
         claim_token="old-token",
         lease_until=timezone.now() - timedelta(seconds=1),
@@ -66,7 +67,7 @@ def test_expired_attempt_is_reissued_with_new_credentials(device_client: APIClie
     assert task.claim_token != "old-token"
     assert task.claim_token == response.json()["claim_token"]
     assert task.lease_until is not None and task.lease_until > timezone.now()
-    assert task.status == "running"
+    assert task.status == TaskStatus.RUNNING
 
 
 def test_empty_queue_does_not_include_other_devices_or_terminal_tasks(
@@ -74,11 +75,13 @@ def test_empty_queue_does_not_include_other_devices_or_terminal_tasks(
 ) -> None:
     Device.objects.create(id="other", name="Other", token_digest="a" * 64)
     other_task = Task.objects.create(device_id="other", action="collect_system_info")
-    Task.objects.create(device_id="pc-42", action="collect_system_info", status="completed")
-    Task.objects.create(device_id="pc-42", action="collect_system_info", status="failed")
+    Task.objects.create(
+        device_id="pc-42", action="collect_system_info", status=TaskStatus.COMPLETED
+    )
+    Task.objects.create(device_id="pc-42", action="collect_system_info", status=TaskStatus.FAILED)
     assert device_client.post("/api/agents/pc-42/claim/").status_code == 204
     other_task.refresh_from_db()
-    assert other_task.status == "pending"
+    assert other_task.status == TaskStatus.PENDING
     assert other_task.attempt == 0
 
 
@@ -95,7 +98,7 @@ def test_device_cannot_claim_for_another_device(device_client: APIClient) -> Non
     assert device_client.post("/api/agents/other/claim/").status_code == 403
     task.refresh_from_db()
     assert task.attempt == 0
-    assert task.status == "pending"
+    assert task.status == TaskStatus.PENDING
 
 
 @pytest.mark.parametrize("credential", ["", "Bearer invalid", "Token device-secret"])
@@ -131,7 +134,7 @@ def test_concurrent_claims_return_exactly_one_attempt(device_client: APIClient) 
     assert sorted(status for status, _ in results) == [200, 204]
     task.refresh_from_db()
     assert task.attempt == 1
-    assert task.status == "running"
+    assert task.status == TaskStatus.RUNNING
     successful = [payload for status, payload in results if status == 200]
     assert successful[0] is not None
     assert successful[0]["id"] == task.pk
