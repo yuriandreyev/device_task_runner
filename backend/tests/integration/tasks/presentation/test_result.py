@@ -171,3 +171,52 @@ def test_simultaneous_results_are_serialized(
     task.refresh_from_db()
     assert task.status == TaskStatus.COMPLETED
     assert task.result in [{"os": "Linux"}, {"os": "Other"}]
+
+
+def test_json_key_order_is_idempotent_but_boolean_and_number_are_distinct(
+    client: APIClient, task: Task
+) -> None:
+    assert (
+        submit(
+            client, task, result={"os": "Linux", "details": {"available": True, "cpus": 8}}
+        ).status_code
+        == 200
+    )
+    snapshot = Task.objects.values().get(pk=task.pk)
+    assert (
+        submit(
+            client, task, result={"details": {"cpus": 8, "available": True}, "os": "Linux"}
+        ).status_code
+        == 200
+    )
+    assert Task.objects.values().get(pk=task.pk) == snapshot
+    assert (
+        submit(
+            client, task, result={"os": "Linux", "details": {"available": 1, "cpus": 8}}
+        ).status_code
+        == 409
+    )
+    assert Task.objects.values().get(pk=task.pk) == snapshot
+
+
+@pytest.mark.parametrize("changed", ["error", "status", "token"])
+def test_failed_task_rejects_conflicting_retries_without_mutation(
+    client: APIClient, task: Task, changed: str
+) -> None:
+    payload: dict[str, object] = {
+        "claim_token": task.claim_token,
+        "status": TaskStatus.FAILED,
+        "error": "collection failed",
+    }
+    url = f"/api/tasks/{task.pk}/result/"
+    assert client.post(url, payload, format="json").status_code == 200
+    snapshot = Task.objects.values().get(pk=task.pk)
+    if changed == "error":
+        payload["error"] = "different failure"
+    elif changed == "status":
+        payload.pop("error")
+        payload.update(status=TaskStatus.COMPLETED, result={})
+    else:
+        payload["claim_token"] = "old-token"
+    assert client.post(url, payload, format="json").status_code == 409
+    assert Task.objects.values().get(pk=task.pk) == snapshot

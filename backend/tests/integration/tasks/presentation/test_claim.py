@@ -116,12 +116,17 @@ def test_administrator_token_cannot_claim(admin_client: APIClient) -> None:
 
 def test_concurrent_claims_return_exactly_one_attempt(device_client: APIClient) -> None:
     task = Task.objects.create(device_id="pc-42", action="collect_system_info")
+    assert connections["default"].vendor == "postgresql"
     barrier = Barrier(2)
+    sessions: list[int] = []
 
     def claim() -> tuple[int, dict[str, object] | None]:
         try:
             client = APIClient()
             client.credentials(HTTP_AUTHORIZATION="Bearer device-secret")
+            db = connections["default"]
+            db.ensure_connection()
+            sessions.append(int(db.connection.info.backend_pid))
             barrier.wait(timeout=5)
             response = client.post("/api/agents/pc-42/claim/")
             return response.status_code, response.json() if response.status_code == 200 else None
@@ -131,6 +136,7 @@ def test_concurrent_claims_return_exactly_one_attempt(device_client: APIClient) 
     with ThreadPoolExecutor(max_workers=2) as pool:
         futures = [pool.submit(claim), pool.submit(claim)]
         results = [future.result(timeout=10) for future in futures]
+    assert len(set(sessions)) == 2
     assert sorted(status for status, _ in results) == [200, 204]
     task.refresh_from_db()
     assert task.attempt == 1
