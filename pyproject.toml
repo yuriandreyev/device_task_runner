@@ -21,8 +21,8 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "config.settings"
-testpaths = ["tests"]
+DJANGO_SETTINGS_MODULE = "backend.config.settings"
+testpaths = ["backend/tests"]
 pythonpath = ["."]
 
 [tool.ruff]
@@ -39,4 +39,4 @@ strict = true
 exclude = [".venv/"]
 
 [tool.django-stubs]
-django_settings_module = "config.settings"
+django_settings_module = "backend.config.settings"
