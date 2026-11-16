@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from backend.tasks.application.dto import TaskData
+from backend.tasks.domain.entities import TaskData
 
 
 class CreateTaskSerializer(serializers.Serializer[dict[str, str]]):

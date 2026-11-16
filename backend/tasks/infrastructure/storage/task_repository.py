@@ -1,7 +1,7 @@
 from django.db import transaction
 
-from backend.tasks.application.dto import TaskData
-from backend.tasks.application.ports import DeviceNotFound, TaskNotFound
+from backend.tasks.domain.entities import TaskData
+from backend.tasks.domain.exceptions import DeviceNotFound, TaskNotFound
 from backend.tasks.infrastructure.models import Device, Task
 
 

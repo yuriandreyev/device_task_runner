@@ -1,14 +1,6 @@
 from typing import Protocol
 
-from backend.tasks.application.dto import TaskData
-
-
-class DeviceNotFound(Exception):
-    pass
-
-
-class TaskNotFound(Exception):
-    pass
+from backend.tasks.domain.entities import TaskData
 
 
 class TaskRepository(Protocol):

@@ -5,9 +5,10 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from backend.tasks.application.ports import DeviceNotFound, TaskNotFound, TaskRepository
+from backend.tasks.application.ports import TaskRepository
 from backend.tasks.application.use_cases.create_task import create_task
 from backend.tasks.application.use_cases.get_task import get_task
+from backend.tasks.domain.exceptions import DeviceNotFound, TaskNotFound
 from backend.tasks.presentation.permissions import CanCreateTask
 from backend.tasks.presentation.serializers import CreateTaskSerializer, TaskSerializer
 

@@ -1,5 +1,5 @@
-from backend.tasks.application.dto import TaskData
 from backend.tasks.application.ports import TaskRepository
+from backend.tasks.domain.entities import TaskData
 
 
 def create_task(repository: TaskRepository, device_id: str, action: str) -> TaskData:
