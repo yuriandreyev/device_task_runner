@@ -1,6 +1,11 @@
-from django.db import transaction
+import secrets
+from datetime import timedelta
 
-from backend.tasks.domain.entities import TaskData
+from django.db import transaction
+from django.db.models import Q
+from django.utils import timezone
+
+from backend.tasks.domain.entities import ClaimedTask, TaskData
 from backend.tasks.domain.exceptions import DeviceNotFound, TaskNotFound
 from backend.tasks.infrastructure.models import Device, Task
 
@@ -18,6 +23,36 @@ def task_data(task: Task) -> TaskData:
 
 
 class DjangoTaskRepository:
+    def claim(self, device_id: str) -> ClaimedTask | None:
+        # A claim must commit before its credentials can be returned to the agent.
+        with transaction.atomic(durable=True):
+            now = timezone.now()
+            task = (
+                Task.objects.select_for_update(skip_locked=True)
+                .filter(device_id=device_id)
+                .filter(
+                    Q(status=Task.Status.PENDING)
+                    | Q(status=Task.Status.RUNNING, lease_until__lte=now)
+                )
+                .order_by("created_at", "id")
+                .first()
+            )
+            if task is None:
+                return None
+            task.status = Task.Status.RUNNING
+            task.attempt += 1
+            task.claim_token = secrets.token_urlsafe(32)
+            task.lease_until = timezone.now() + timedelta(seconds=60)
+            task.save(update_fields=["status", "attempt", "claim_token", "lease_until"])
+            claimed = ClaimedTask(
+                id=task.pk,
+                action=task.action,
+                attempt=task.attempt,
+                claim_token=task.claim_token,
+                lease_until=task.lease_until,
+            )
+        return claimed
+
     def create(self, device_id: str, action: str) -> TaskData:
         with transaction.atomic():
             try:

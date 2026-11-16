@@ -6,11 +6,17 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from backend.tasks.application.ports import TaskRepository
+from backend.tasks.application.use_cases.claim_task import claim_task
 from backend.tasks.application.use_cases.create_task import create_task
 from backend.tasks.application.use_cases.get_task import get_task
 from backend.tasks.domain.exceptions import DeviceNotFound, TaskNotFound
-from backend.tasks.presentation.permissions import CanCreateTask
-from backend.tasks.presentation.serializers import CreateTaskSerializer, TaskSerializer
+from backend.tasks.infrastructure.authentication import DeviceTokenAuthentication
+from backend.tasks.presentation.permissions import CanCreateTask, OwnsDevice
+from backend.tasks.presentation.serializers import (
+    ClaimedTaskSerializer,
+    CreateTaskSerializer,
+    TaskSerializer,
+)
 
 
 class TaskListView(APIView):
@@ -41,3 +47,16 @@ class TaskDetailView(APIView):
         except TaskNotFound as exc:
             raise NotFound("Task not found") from exc
         return Response(TaskSerializer(task).data)
+
+
+class ClaimTaskView(APIView):
+    authentication_classes = [DeviceTokenAuthentication]
+    permission_classes = [IsAuthenticated, OwnsDevice]
+    repository: TaskRepository | None = None
+
+    def post(self, request: Request, device_id: str) -> Response:
+        assert self.repository is not None
+        task = claim_task(self.repository, device_id)
+        if task is None:
+            return Response(status=204)
+        return Response(ClaimedTaskSerializer(task).data)

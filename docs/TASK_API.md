@@ -38,5 +38,25 @@ includes device credentials, token digests or the attempt's `claim_token`.
 Invalid input returns `400`, missing devices/tasks return `404`, missing or invalid
 user tokens return `401`, and insufficient creation permission returns `403`.
 
-Device authentication verifies a SHA-256 digest and device ownership. The agent
-claim/result endpoints are later implementation steps and are not available yet.
+## Claim a task
+
+Use the device token printed by `create_demo_device`, not the administrator token:
+
+```sh
+curl -X POST http://127.0.0.1:8000/api/agents/pc-42/claim/ \
+  -H "Authorization: Bearer <device-token>"
+```
+
+The response is `200` with `id`, `action`, `attempt`, `claim_token` and `lease_until`,
+or `204` with an empty body when no task is available. A successful claim commits
+before returning, sets status to `running`, increments the attempt, generates a new
+claim token and leases the task for 60 seconds. Eligible tasks are selected in
+creation order; rows locked by another transaction are skipped.
+
+A running task becomes eligible again after its lease expires. Reclaiming changes
+the attempt and token. Execution may therefore repeat after a failure; exactly-once
+execution is not guaranteed. Completed/failed tasks are never claimed again.
+
+Device authentication verifies a SHA-256 digest and device ownership. Invalid or
+missing credentials return `401`; requesting another device's queue returns `403`.
+The result endpoint is a later implementation step and is not available yet.
