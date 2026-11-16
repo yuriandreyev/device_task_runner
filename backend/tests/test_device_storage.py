@@ -2,14 +2,24 @@ import hashlib
 from io import StringIO
 
 import pytest
+from django.apps import apps
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import IntegrityError, connection, transaction
 from django.db.models.deletion import ProtectedError
 
-from devices.infrastructure.models import Device, Task
+from backend.tasks.infrastructure.models import Device, Task
 
 pytestmark = pytest.mark.django_db
+
+
+def test_tasks_app_preserves_existing_database_identity() -> None:
+    config = apps.get_app_config("devices")
+    assert config.name == "backend.tasks"
+    assert config.get_model("Device") is Device
+    assert config.get_model("Task") is Task
+    assert Device._meta.db_table == "devices_device"
+    assert Task._meta.db_table == "devices_task"
 
 
 def test_create_demo_device_stores_only_digest_and_preserves_existing_token() -> None:

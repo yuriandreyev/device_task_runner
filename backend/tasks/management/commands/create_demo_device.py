@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 from django.db import IntegrityError, transaction
 
-from devices.infrastructure.models import Device
+from backend.tasks.infrastructure.models import Device
 
 
 class Command(BaseCommand):
