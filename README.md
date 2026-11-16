@@ -73,6 +73,8 @@ credentials in `.env` does not reset an existing PostgreSQL volume's credentials
 
 ## Two-agent demo (about two minutes after setup)
 
+For a narrated recording, follow the [screencast guide](docs/SCREENCAST.md).
+
 Start with the freshly provisioned device's empty queue. In the second terminal,
 create exactly one task, then launch two agents for that same device:
 
