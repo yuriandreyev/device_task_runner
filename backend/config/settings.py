@@ -22,7 +22,6 @@ ALLOWED_HOSTS = [
     for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
     if host.strip()
 ]
-ADMIN_TOKEN = required_env("ADMIN_TOKEN")
 
 INSTALLED_APPS = [
     "django.contrib.auth",
@@ -31,6 +30,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "rest_framework.authtoken",
     "backend.tasks.apps.TasksConfig",
 ]
 MIGRATION_MODULES = {"devices": "backend.tasks.infrastructure.storage.migrations"}

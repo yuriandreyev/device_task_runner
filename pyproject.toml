@@ -21,6 +21,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
+addopts = "--import-mode=importlib"
 DJANGO_SETTINGS_MODULE = "backend.config.settings"
 testpaths = ["backend/tests"]
 pythonpath = ["."]

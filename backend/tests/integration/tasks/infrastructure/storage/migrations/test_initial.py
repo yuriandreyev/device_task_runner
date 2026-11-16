@@ -11,7 +11,7 @@ def test_django_discovers_relocated_migration() -> None:
     loader = MigrationLoader(connection)
     migration = loader.disk_migrations[("devices", "0001_initial")]
     assert migration.__module__ == ("backend.tasks.infrastructure.storage.migrations.0001_initial")
-    assert loader.graph.leaf_nodes("devices") == [("devices", "0001_initial")]
+    assert loader.graph.leaf_nodes("devices") == [("devices", "0002_alter_task_options")]
     assert ("devices", "0001_initial") in loader.applied_migrations
 
 

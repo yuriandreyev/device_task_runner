@@ -30,6 +30,7 @@ class Task(models.Model):
     completed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
+        permissions = [("create_task", "Can create task")]
         indexes = [
             models.Index(fields=["device", "status", "created_at", "id"], name="task_pending_idx"),
             models.Index(fields=["device", "status", "lease_until"], name="task_lease_idx"),
