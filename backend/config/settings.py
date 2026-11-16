@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "backend.tasks.apps.TasksConfig",
 ]
+MIGRATION_MODULES = {"devices": "backend.tasks.infrastructure.storage.migrations"}
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",

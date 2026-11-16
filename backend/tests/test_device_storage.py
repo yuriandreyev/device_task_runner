@@ -6,6 +6,7 @@ from django.apps import apps
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import IntegrityError, connection, transaction
+from django.db.migrations.loader import MigrationLoader
 from django.db.models.deletion import ProtectedError
 
 from backend.tasks.infrastructure.models import Device, Task
@@ -20,6 +21,14 @@ def test_tasks_app_preserves_existing_database_identity() -> None:
     assert config.get_model("Task") is Task
     assert Device._meta.db_table == "devices_device"
     assert Task._meta.db_table == "devices_task"
+
+
+def test_django_discovers_relocated_migration() -> None:
+    loader = MigrationLoader(connection)
+    migration = loader.disk_migrations[("devices", "0001_initial")]
+    assert migration.__module__ == ("backend.tasks.infrastructure.storage.migrations.0001_initial")
+    assert loader.graph.leaf_nodes("devices") == [("devices", "0001_initial")]
+    assert ("devices", "0001_initial") in loader.applied_migrations
 
 
 def test_create_demo_device_stores_only_digest_and_preserves_existing_token() -> None:
