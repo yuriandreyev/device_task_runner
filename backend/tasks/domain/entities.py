@@ -3,7 +3,7 @@ from datetime import datetime
 
 
 @dataclass(frozen=True)
-class TaskData:
+class Task:
     id: int
     device_id: str
     action: str

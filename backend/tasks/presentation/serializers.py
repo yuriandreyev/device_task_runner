@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from backend.tasks.domain.entities import ClaimedTask, TaskData
+from backend.tasks.domain.entities import ClaimedTask, Task
 
 
 class CreateTaskSerializer(serializers.Serializer[dict[str, str]]):
@@ -8,7 +8,7 @@ class CreateTaskSerializer(serializers.Serializer[dict[str, str]]):
     action = serializers.ChoiceField(choices=["collect_system_info"])
 
 
-class TaskSerializer(serializers.Serializer[TaskData]):
+class TaskSerializer(serializers.Serializer[Task]):
     id = serializers.IntegerField(read_only=True)
     device_id = serializers.CharField(read_only=True)
     action = serializers.CharField(read_only=True)

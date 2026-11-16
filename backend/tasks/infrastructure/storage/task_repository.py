@@ -5,13 +5,14 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from backend.tasks.domain.entities import ClaimedTask, TaskData
+from backend.tasks.domain.entities import ClaimedTask, Task
 from backend.tasks.domain.exceptions import DeviceNotFound, TaskNotFound
-from backend.tasks.infrastructure.models import Device, Task
+from backend.tasks.infrastructure.models import Device
+from backend.tasks.infrastructure.models import Task as TaskModel
 
 
-def task_data(task: Task) -> TaskData:
-    return TaskData(
+def to_entity(task: TaskModel) -> Task:
+    return Task(
         id=task.pk,
         device_id=task.device_id,
         action=task.action,
@@ -28,18 +29,18 @@ class DjangoTaskRepository:
         with transaction.atomic(durable=True):
             now = timezone.now()
             task = (
-                Task.objects.select_for_update(skip_locked=True)
+                TaskModel.objects.select_for_update(skip_locked=True)
                 .filter(device_id=device_id)
                 .filter(
-                    Q(status=Task.Status.PENDING)
-                    | Q(status=Task.Status.RUNNING, lease_until__lte=now)
+                    Q(status=TaskModel.Status.PENDING)
+                    | Q(status=TaskModel.Status.RUNNING, lease_until__lte=now)
                 )
                 .order_by("created_at", "id")
                 .first()
             )
             if task is None:
                 return None
-            task.status = Task.Status.RUNNING
+            task.status = TaskModel.Status.RUNNING
             task.attempt += 1
             task.claim_token = secrets.token_urlsafe(32)
             task.lease_until = timezone.now() + timedelta(seconds=60)
@@ -53,17 +54,17 @@ class DjangoTaskRepository:
             )
         return claimed
 
-    def create(self, device_id: str, action: str) -> TaskData:
+    def create(self, device_id: str, action: str) -> Task:
         with transaction.atomic():
             try:
                 device = Device.objects.select_for_update().get(pk=device_id)
             except Device.DoesNotExist as exc:
                 raise DeviceNotFound from exc
-            return task_data(Task.objects.create(device=device, action=action))
+            return to_entity(TaskModel.objects.create(device=device, action=action))
 
-    def get(self, task_id: int) -> TaskData:
+    def get(self, task_id: int) -> Task:
         try:
-            task = Task.objects.get(pk=task_id)
-        except Task.DoesNotExist as exc:
+            task = TaskModel.objects.get(pk=task_id)
+        except TaskModel.DoesNotExist as exc:
             raise TaskNotFound from exc
-        return task_data(task)
+        return to_entity(task)
