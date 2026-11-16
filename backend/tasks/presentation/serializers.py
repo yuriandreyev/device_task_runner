@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from backend.tasks.domain.entities import ClaimedTask, Task
+from backend.tasks.domain.entities import ClaimedTask, DevicePresence, Task
 from backend.tasks.domain.enums import TaskStatus
 
 
@@ -43,3 +43,8 @@ class TaskResultSerializer(serializers.Serializer[dict[str, object]]):
             raise serializers.ValidationError("Provide an error and no result")
         attrs["status"] = TaskStatus(str(attrs["status"]))
         return attrs
+
+
+class DevicePresenceSerializer(serializers.Serializer[DevicePresence]):
+    device_id = serializers.CharField(read_only=True)
+    status = serializers.CharField(read_only=True)

@@ -80,3 +80,21 @@ including `completed_at`; conflicting retries and stale tokens return `409`.
 An expired lease still permits completion until another claim replaces the token.
 Pending tasks return `409`, missing tasks `404`, another device's task `403`, and
 missing/invalid device credentials `401`. Both completed and failed are terminal.
+
+## Read device presence (optional Redis)
+
+```sh
+curl http://127.0.0.1:8000/api/devices/pc-42/presence/ \
+  -H "Authorization: Token <user-token>"
+```
+
+Returns `200` with `{"device_id":"pc-42","status":"online"}` (or `offline` /
+`unknown`). Any active authenticated DRF user can read, matching task-read access;
+agent Bearer tokens cannot. Missing devices return `404`, invalid credentials
+return `401`. No device secrets, claim tokens or task results appear here.
+
+Successful authorized claim requests (200/204), accepted results and owned result
+conflicts refresh a 90-second Redis marker. No marker in a healthy Redis means
+`offline`; disabled/unreachable Redis means `unknown`. Reads do not extend TTL.
+Redis errors do not change claim/result responses or PostgreSQL state. See the
+root README for enabling Redis and running real integration tests.

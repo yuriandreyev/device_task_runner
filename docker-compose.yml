@@ -15,5 +15,17 @@ services:
       timeout: 5s
       retries: 15
 
+  redis:
+    image: redis:7-alpine
+    profiles: [presence]
+    command: [redis-server, --save, "", --appendonly, "no"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
 volumes:
   postgres_data:

@@ -5,10 +5,11 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from backend.tasks.application.ports import TaskRepository
+from backend.tasks.application.ports import DeviceLookup, PresenceTracker, TaskRepository
 from backend.tasks.application.use_cases.claim_task import claim_task
 from backend.tasks.application.use_cases.complete_task import complete_task
 from backend.tasks.application.use_cases.create_task import create_task
+from backend.tasks.application.use_cases.get_presence import get_presence
 from backend.tasks.application.use_cases.get_task import get_task
 from backend.tasks.domain.entities import TaskResult
 from backend.tasks.domain.exceptions import (
@@ -22,6 +23,7 @@ from backend.tasks.presentation.permissions import CanCreateTask, OwnsDevice
 from backend.tasks.presentation.serializers import (
     ClaimedTaskSerializer,
     CreateTaskSerializer,
+    DevicePresenceSerializer,
     TaskResultSerializer,
     TaskSerializer,
 )
@@ -58,6 +60,7 @@ class TaskDetailView(APIView):
 
 
 class ClaimTaskView(APIView):
+    presence: PresenceTracker | None = None
     authentication_classes = [DeviceTokenAuthentication]
     permission_classes = [IsAuthenticated, OwnsDevice]
     repository: TaskRepository | None = None
@@ -65,12 +68,15 @@ class ClaimTaskView(APIView):
     def post(self, request: Request, device_id: str) -> Response:
         assert self.repository is not None
         task = claim_task(self.repository, device_id)
+        if self.presence is not None:
+            self.presence.mark_seen(device_id)
         if task is None:
             return Response(status=204)
         return Response(ClaimedTaskSerializer(task).data)
 
 
 class TaskResultView(APIView):
+    presence: PresenceTracker | None = None
     authentication_classes = [DeviceTokenAuthentication]
     permission_classes = [IsAuthenticated]
     repository: TaskRepository | None = None
@@ -88,5 +94,24 @@ class TaskResultView(APIView):
         except DeviceMismatch as exc:
             raise PermissionDenied("Task belongs to another device") from exc
         except ResultConflict:
+            if self.presence is not None:
+                self.presence.mark_seen(request.user.device_id)
             return Response({"detail": "Stale or conflicting result"}, status=409)
+        if self.presence is not None:
+            self.presence.mark_seen(request.user.device_id)
         return Response(TaskSerializer(task).data)
+
+
+class DevicePresenceView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    devices: DeviceLookup | None = None
+    presence: PresenceTracker | None = None
+
+    def get(self, request: Request, device_id: str) -> Response:
+        assert self.devices is not None and self.presence is not None
+        try:
+            result = get_presence(self.devices, self.presence, device_id)
+        except DeviceNotFound as exc:
+            raise NotFound("Device not found") from exc
+        return Response(DevicePresenceSerializer(result).data)

@@ -15,7 +15,8 @@ Administrator -- create/read --> Django + DRF --> PostgreSQL
 
 PostgreSQL is the source of truth. The agent only collects OS name/release,
 logical CPU count and total physical RAM; it does not execute arbitrary commands.
-Redis, push delivery and background queues are outside this MVP.
+Optional Redis stores only a short-lived presence marker. Push delivery and
+background queues are outside this MVP.
 
 ## Start from a fresh checkout
 
@@ -163,6 +164,55 @@ This is a local demonstration, using Django's development server. Production nee
 TLS deployment, credential rotation, audit, rate limiting, result-size limits and
 monitoring. There is no remote shell, full UEM/RBAC platform, push transport or
 capacity claim for thousands of devices.
+
+## Optional Redis presence
+
+Presence is disabled by default and returns `unknown`. To enable it:
+
+```sh
+make redis-up
+```
+
+Set `REDIS_URL=redis://127.0.0.1:6379/0` in `.env`, then restart the Django server.
+If port 6379 is occupied, set `REDIS_PORT` before starting Redis and use the same
+port in `REDIS_URL`. The Compose service binds to loopback, disables disk
+persistence and is optional; `make db-up` continues to start only PostgreSQL.
+
+After an agent poll (even an empty queue), read presence with a user token:
+
+```sh
+uv run python -m agent --once
+curl --fail-with-body -sS "$SERVER_URL/api/devices/$DEVICE_ID/presence/" \
+  -H "Authorization: Token $USER_TOKEN"
+# {"device_id":"pc-42","status":"online"}
+```
+
+`online` means an authorized claim/result request was recently observed. Redis
+stores only `agent:{device_id}:online = 1` with a refreshed 90-second TTL; it never
+stores tasks, claim tokens, device secrets or results. Without another agent
+request, the marker expires and a healthy Redis reports `offline` (not seen
+recently, rather than proof the device is powered off). A disabled/unavailable
+Redis reports `unknown`. Presence reads do not refresh the TTL. Owned result
+retries/conflicts count as activity; unauthenticated, wrong-device, missing-task
+and malformed requests do not.
+
+To demonstrate failure handling, `docker compose stop redis`, then run an agent
+and read presence: claims/results continue, while presence returns `unknown`.
+`make redis-up` restores the service. Socket/connect timeouts are 0.2 seconds,
+without client retries. PostgreSQL task transactions finish before Redis updates;
+presence is never part of task delivery or its guarantees.
+
+Real Redis integration tests use unique disposable keys and require an explicit
+test URL (otherwise those two tests skip):
+
+```sh
+TEST_REDIS_URL=redis://127.0.0.1:6379/15 make verify
+```
+
+These tests verify a 90-second production TTL and its refresh, then exercise real
+server expiry with a one-second test TTL. Other tests cover Redis exceptions and
+actual connection refusal while claiming and submitting results. Tests isolate
+the application from the developer's configured Redis.
 
 ## Verification
 

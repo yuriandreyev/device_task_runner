@@ -33,3 +33,18 @@ T07 also verifies the full suite in a seeded shuffled order to look for fixture
 or global-state dependencies. No test-randomization dependency is needed: pytest's
 `pytest_collection_modifyitems` hook can shuffle the collected items with a local
 `random.Random` instance. T08's manual demo and clean-start checks remain separate.
+
+## Optional presence (T09)
+
+`unit/tasks/application/use_cases/test_get_presence.py` covers device lookup and
+all presence states. `integration/tasks/presentation/test_presence.py` covers
+user/device authentication, marker-only writes, Redis exceptions and genuine
+connection refusal with unchanged task lifecycle behavior. Integration fixtures
+isolate application Redis access from the developer's configured URL.
+
+Start Redis with `make redis-up`, then run
+`TEST_REDIS_URL=redis://127.0.0.1:6379/15 make verify` for the real Redis tests in
+`integration/tasks/infrastructure/test_presence.py`. They use unique keys and
+remove only those keys. They check the production 90-second TTL and refresh,
+then real expiry using a one-second test TTL. Without TEST_REDIS_URL these two
+tests skip; other presence/failure tests still run.

@@ -76,3 +76,6 @@ USE_I18N = True
 USE_TZ = True
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Optional presence only; Redis never participates in task persistence.
+REDIS_URL = os.environ.get("REDIS_URL", "")

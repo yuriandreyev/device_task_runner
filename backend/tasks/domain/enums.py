@@ -6,3 +6,9 @@ class TaskStatus(StrEnum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+class PresenceStatus(StrEnum):
+    ONLINE = "online"
+    OFFLINE = "offline"
+    UNKNOWN = "unknown"

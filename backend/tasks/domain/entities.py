@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from backend.tasks.domain.enums import TaskStatus
+from backend.tasks.domain.enums import PresenceStatus, TaskStatus
 
 
 @dataclass(frozen=True)
@@ -30,3 +30,9 @@ class TaskResult:
     status: TaskStatus
     result: object = None
     error: str = ""
+
+
+@dataclass(frozen=True)
+class DevicePresence:
+    device_id: str
+    status: PresenceStatus

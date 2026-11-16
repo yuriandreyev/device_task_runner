@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 UV ?= uv
 
-.PHONY: help sync db-up db-down db-logs migrate migrations-check run check lint format test verify
+.PHONY: help sync redis-up db-up db-down db-logs migrate migrations-check run check lint format test verify
 
 help: ## Show available commands
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "%-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -11,6 +11,9 @@ sync: ## Install locked runtime and development dependencies
 
 db-up: ## Start PostgreSQL and wait until ready
 	docker compose up -d --wait db
+
+redis-up: ## Start optional Redis presence service
+	docker compose up -d --wait redis
 
 db-down: ## Stop services, preserving database data
 	docker compose down
