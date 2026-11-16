@@ -1,22 +1,21 @@
 # Device Task Runner
 
 A demo backend for issuing `collect_system_info` tasks to remote desktop agents.
-Python 3.13, Django 5.2, DRF and PostgreSQL 17. The agent initiates outgoing HTTP
-requests, so it can poll from behind NAT without an inbound device port.
+Python 3.13, Django 5.2, DRF, PostgreSQL 17 and optional Redis 7. The agent initiates
+outgoing HTTP requests, so it can poll from behind NAT without an inbound device port.
 
 ```text
 Administrator -- create/read --> Django + DRF --> PostgreSQL
-                                    ^               |
-                                    |      tasks, leases, results
-                         claim / result
-                                    |
-                              Python agent
+                                    ^   |        tasks, leases, results
+                         claim / result |
+                                    |   +-----> Redis (optional)
+                              Python agent       presence marker, TTL 90s
 ```
 
 PostgreSQL is the source of truth. The agent only collects OS name/release,
 logical CPU count and total physical RAM; it does not execute arbitrary commands.
 Optional Redis stores only a short-lived presence marker. Push delivery and
-background queues are outside this MVP.
+background queues are outside this MVP. See [Redis setup and demo](#optional-redis-presence).
 
 ## Start from a fresh checkout
 
@@ -35,6 +34,8 @@ an existing `.env` when returning to an already configured checkout.
 
 ```sh
 make db-up
+# Optional presence: see the Redis section for REDIS_URL configuration.
+# make redis-up
 make migrate
 uv run python manage.py createsuperuser --username demo
 uv run python manage.py drf_create_token demo
@@ -109,6 +110,7 @@ seconds. Ctrl-C stops it. See [agent operation and retries](agent/README.md).
 | --- | --- | --- |
 | `POST /api/tasks/` | `Token <user-token>` + create permission | `201`, pending task |
 | `GET /api/tasks/{id}/` | `Token <user-token>` | `200`, task and result/error |
+| `GET /api/devices/{device_id}/presence/` | `Token <user-token>` | `200`, device ID and presence status |
 | `POST /api/agents/{device_id}/claim/` | `Bearer <device-token>` | `200`, attempt/token/lease; or empty `204` |
 | `POST /api/tasks/{id}/result/` | `Bearer <device-token>` | `200`, accepted or identical retry |
 
@@ -167,18 +169,38 @@ capacity claim for thousands of devices.
 
 ## Optional Redis presence
 
-Presence is disabled by default and returns `unknown`. To enable it:
+Presence is disabled by default and returns `unknown`. PostgreSQL remains the
+source of truth for tasks; Redis provides only the optional activity indicator.
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `REDIS_URL` | Empty | Django connection URL; empty disables presence |
+| `REDIS_PORT` | `6379` | Host port published by Compose; keep the URL port in sync |
+| `TEST_REDIS_URL` | Unset | Explicit Redis URL for real integration tests |
+
+To enable presence, set these values in `.env`:
+
+```dotenv
+REDIS_URL=redis://127.0.0.1:6379/0
+REDIS_PORT=6379
+```
+
+Start Redis, check its health, then restart Django in the server terminal:
 
 ```sh
 make redis-up
+docker compose exec -T redis redis-cli ping
+# PONG
+# Stop the existing Django server with Ctrl-C, then:
+make run
 ```
 
-Set `REDIS_URL=redis://127.0.0.1:6379/0` in `.env`, then restart the Django server.
 If port 6379 is occupied, set `REDIS_PORT` before starting Redis and use the same
 port in `REDIS_URL`. The Compose service binds to loopback, disables disk
 persistence and is optional; `make db-up` continues to start only PostgreSQL.
 
-After an agent poll (even an empty queue), read presence with a user token:
+In the agent terminal, use the exported variables from setup. A poll refreshes
+presence even when the queue is empty:
 
 ```sh
 uv run python -m agent --once
@@ -196,11 +218,31 @@ Redis reports `unknown`. Presence reads do not refresh the TTL. Owned result
 retries/conflicts count as activity; unauthenticated, wrong-device, missing-task
 and malformed requests do not.
 
-To demonstrate failure handling, `docker compose stop redis`, then run an agent
-and read presence: claims/results continue, while presence returns `unknown`.
-`make redis-up` restores the service. Socket/connect timeouts are 0.2 seconds,
-without client retries. PostgreSQL task transactions finish before Redis updates;
-presence is never part of task delivery or its guarantees.
+To see expiry, stop continuous agents, wait 91 seconds after the last agent
+request, and repeat the presence GET: it returns `offline`. Repeating the GET
+does not keep the device online. Run `uv run python -m agent --once` again to
+restore `online`.
+
+To demonstrate a Redis outage without stopping PostgreSQL or Django:
+
+```sh
+docker compose stop redis
+uv run python -m agent --once
+curl --fail-with-body -sS "$SERVER_URL/api/devices/$DEVICE_ID/presence/" \
+  -H "Authorization: Token $USER_TOKEN"
+# {"device_id":"pc-42","status":"unknown"}
+make redis-up
+```
+
+The agent can still claim and submit tasks during this outage. After restoring
+Redis, poll once more to restore `online`; Redis restarts lose the transient
+markers because persistence is disabled. Clear `REDIS_URL` and restart Django
+to disable presence again. `make db-down` stops both services while preserving
+the PostgreSQL volume.
+
+Socket/connect timeouts are 0.2 seconds, without client retries. PostgreSQL task
+transactions finish before Redis updates; presence is never part of task delivery
+or its guarantees.
 
 Real Redis integration tests use unique disposable keys and require an explicit
 test URL (otherwise those two tests skip):
