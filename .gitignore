@@ -13,3 +13,5 @@ htmlcov/
 .idea/
 scripts/
 .agent/
+.uv-cache/
+docs/
